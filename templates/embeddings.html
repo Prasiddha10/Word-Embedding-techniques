@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Word Embeddings Explorer</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        .input-area {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        textarea {
+            flex: 1;
+            height: 100px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        select {
+            padding: 8px;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+        }
+        .results {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+        .visualization {
+            flex: 1;
+            min-width: 300px;
+            border: 1px solid #ddd;
+            padding: 15px;
+            border-radius: 4px;
+        }
+        .neighbors {
+            flex: 1;
+            min-width: 300px;
+            border: 1px solid #ddd;
+            padding: 15px;
+            border-radius: 4px;
+        }
+        .embedding-vector {
+            flex: 1;
+            min-width: 300px;
+            border: 1px solid #ddd;
+            padding: 15px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+        img {
+            max-width: 100%;
+            height: auto;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        pre {
+            background-color: #f5f5f5;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+        .controls {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 20px;
+        }
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        label {
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Word Embeddings Explorer</h1>
+        
+        <div class="input-area">
+            <textarea id="wordsInput" placeholder="Enter words separated by commas (e.g., dog, cat, fox, jump)"></textarea>
+        </div>
+        
+        <div class="controls">
+            <div class="control-group">
+                <label for="methodSelect">Embedding Method:</label>
+                <select id="methodSelect">
+                    <option value="glove">GloVe</option>
+                    <option value="word2vec">Word2Vec (Trained on Corpus)</option>
+                    <option value="tfidf">TF-IDF</option>
+                </select>
+            </div>
+            
+            <div class="control-group">
+                <label for="reductionSelect">Visualization Method:</label>
+                <select id="reductionSelect">
+                    <option value="tsne">t-SNE</option>
+                    <option value="pca">PCA</option>
+                </select>
+            </div>
+            
+            <div class="control-group">
+                <label for="neighborsSelect">Neighbors Count:</label>
+                <select id="neighborsSelect">
+                    <option value="3">3</option>
+                    <option value="5" selected>5</option>
+                    <option value="10">10</option>
+                </select>
+            </div>
+            
+            <button onclick="processWords()">Process Words</button>
+        </div>
+        
+        <div class="results">
+            <div class="visualization">
+                <h2>Word Embeddings Visualization</h2>
+                <div id="visualizationResult"></div>
+            </div>
+            
+            <div class="neighbors">
+                <h2>Nearest Neighbors</h2>
+                <select id="wordSelect" onchange="showNeighbors()"></select>
+                <div id="neighborsResult"></div>
+            </div>
+            
+            <div class="embedding-vector">
+                <h2>Embedding Vector</h2>
+                <select id="vectorWordSelect" onchange="showVector()"></select>
+                <pre id="vectorResult"></pre>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentWords = [];
+        let currentMethod = 'glove';
+        
+        function processWords() {
+            const input = document.getElementById('wordsInput').value.trim();
+            if (!input) {
+                alert('Please enter some words');
+                return;
+            }
+            
+            const words = input.split(',').map(w => w.trim()).filter(w => w);
+            currentWords = words;
+            currentMethod = document.getElementById('methodSelect').value;
+            const reduction = document.getElementById('reductionSelect').value;
+            
+            // Clear previous results
+            document.getElementById('visualizationResult').innerHTML = '<p>Loading...</p>';
+            document.getElementById('neighborsResult').innerHTML = '';
+            document.getElementById('vectorResult').innerText = '';
+            
+            // Get embeddings and visualize
+            fetch('/api/visualize', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    words: words,
+                    method: currentMethod,
+                    reduction: reduction
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    document.getElementById('visualizationResult').innerHTML = `<p style="color: red">${data.error}</p>`;
+                    return;
+                }
+                
+                document.getElementById('visualizationResult').innerHTML = `
+                    <img src="data:image/png;base64,${data.image}" alt="Embeddings Visualization">
+                    <h3>Coordinates</h3>
+                    <pre>${JSON.stringify(data.coordinates, null, 2)}</pre>
+                `;
+                
+                // Populate word selectors
+                const wordSelect = document.getElementById('wordSelect');
+                const vectorSelect = document.getElementById('vectorWordSelect');
+                wordSelect.innerHTML = '';
+                vectorSelect.innerHTML = '';
+                
+                Object.keys(data.coordinates).forEach(word => {
+                    const option = document.createElement('option');
+                    option.value = word;
+                    option.textContent = word;
+                    wordSelect.appendChild(option);
+                    
+                    const option2 = document.createElement('option');
+                    option2.value = word;
+                    option2.textContent = word;
+                    vectorSelect.appendChild(option2);
+                });
+                
+                // Show neighbors and vector for first word
+                if (wordSelect.options.length > 0) {
+                    showNeighbors();
+                    showVector();
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                document.getElementById('visualizationResult').innerHTML = `<p style="color: red">Error loading visualization</p>`;
+            });
+        }
+        
+        function showNeighbors() {
+            const wordSelect = document.getElementById('wordSelect');
+            const word = wordSelect.value;
+            const topn = document.getElementById('neighborsSelect').value;
+            
+            if (!word) return;
+            
+            document.getElementById('neighborsResult').innerHTML = '<p>Loading...</p>';
+            
+            fetch('/api/neighbors', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    word: word,
+                    method: currentMethod,
+                    topn: parseInt(topn)
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    document.getElementById('neighborsResult').innerHTML = `<p style="color: red">${data.error}</p>`;
+                    return;
+                }
+                
+                let html = `<h3>Nearest neighbors for "${word}"</h3>`;
+                html += '<table><tr><th>Word</th><th>Similarity</th></tr>';
+                
+                data.neighbors.forEach(item => {
+                    html += `<tr><td>${item.word}</td><td>${item.similarity.toFixed(4)}</td></tr>`;
+                });
+                
+                html += '</table>';
+                document.getElementById('neighborsResult').innerHTML = html;
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                document.getElementById('neighborsResult').innerHTML = `<p style="color: red">Error loading neighbors</p>`;
+            });
+        }
+        
+        function showVector() {
+            const word = document.getElementById('vectorWordSelect').value;
+            
+            if (!word) return;
+            
+            document.getElementById('vectorResult').innerText = 'Loading...';
+            
+            fetch('/api/embeddings', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    words: [word],
+                    method: currentMethod
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error || !data.results || data.results.length === 0) {
+                    document.getElementById('vectorResult').innerText = 'Error loading vector';
+                    return;
+                }
+                
+                const result = data.results[0];
+                if (result.error) {
+                    document.getElementById('vectorResult').innerText = result.error;
+                    return;
+                }
+                
+                document.getElementById('vectorResult').innerText = 
+                    `Word: ${result.word}\nMethod: ${result.method}\nVector (first 10 dims): ${result.vector.slice(0, 10).join(', ')}...\n\nFull vector:\n${JSON.stringify(result.vector, null, 2)}`;
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                document.getElementById('vectorResult').innerText = 'Error loading vector';
+            });
+        }
+    </script>
+</body>
+</html>
